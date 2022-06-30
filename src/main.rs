@@ -2,10 +2,7 @@ mod particle;
 
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
-use heron::{
-    prelude::*,
-    rapier_plugin::{convert::IntoRapier, rapier2d::prelude::RigidBodySet, RigidBodyHandle},
-};
+use bevy_rapier2d::prelude::*;
 use image::{imageops::FilterType, io::Reader as ImageReader, DynamicImage, GenericImageView};
 use v4l::prelude::*;
 
@@ -26,16 +23,17 @@ fn main() {
     App::new()
         .insert_resource(Msaa { samples: 4 })
         .insert_resource(ClearColor(Color::BLACK))
-        .insert_resource(Gravity::from(Vec3::new(0.0, -9.81, 0.0)))
+        // .insert_resource(Gravity::from(Vec3::new(0.0, -9.81, 0.0)))
         .insert_resource(grid_size)
         .insert_resource(img)
         .insert_resource(WindowDescriptor {
-            // width: 1280. / 2.,
-            // height: 720. / 2.,
+            width: 640.,
+            height: 480.,
             ..default()
         })
         .add_plugins(DefaultPlugins)
-        .add_plugin(PhysicsPlugin::pixels_per_meter(50.0))
+        .add_plugin(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(50.0))
+        // .add_plugin(RapierDebugRenderPlugin::default())
         .add_plugin(ShapePlugin)
         .add_startup_system(setup_system)
         // .add_system(enable_ccd)
@@ -45,16 +43,16 @@ fn main() {
         .run();
 }
 
-fn enable_ccd(
-    mut rigid_bodies: ResMut<RigidBodySet>,
-    new_handles: Query<&RigidBodyHandle, Added<RigidBodyHandle>>,
-) {
-    for handle in new_handles.iter() {
-        if let Some(body) = rigid_bodies.get_mut(handle.into_rapier()) {
-            body.enable_ccd(true);
-        }
-    }
-}
+// fn enable_ccd(
+//     mut rigid_bodies: ResMut<RigidBodySet>,
+//     new_handles: Query<&RigidBodyHandle, Added<RigidBodyHandle>>,
+// ) {
+//     for handle in new_handles.iter() {
+//         if let Some(body) = rigid_bodies.get_mut(handle.into_rapier()) {
+//             body.enable_ccd(true);
+//         }
+//     }
+// }
 
 fn setup_system(
     mut commands: Commands,
@@ -84,11 +82,8 @@ fn setup_system(
                 0.0,
             )),
         ))
-        .insert(RigidBody::Static)
-        .insert(CollisionShape::Cuboid {
-            half_extends: Vec3::new(primary_window.width(), 20.0, 0.0),
-            border_radius: None,
-        });
+        .insert(RigidBody::Fixed)
+        .insert(Collider::cuboid(primary_window.width(), 20.0));
 
     commands
         .spawn_bundle(TransformBundle::from_transform(
@@ -98,21 +93,15 @@ fn setup_system(
                 0.0,
             )),
         ))
-        .insert(RigidBody::Static)
-        .insert(CollisionShape::Cuboid {
-            half_extends: Vec3::new(20.0, primary_window.height(), 0.0),
-            border_radius: None,
-        });
+        .insert(RigidBody::Fixed)
+        .insert(Collider::cuboid(20.0, primary_window.height()));
 
     commands
         .spawn_bundle(TransformBundle::from_transform(
             Transform::from_translation(Vec3::new((primary_window.width() / 2.0) + 20.0, 0.0, 0.0)),
         ))
-        .insert(RigidBody::Static)
-        .insert(CollisionShape::Cuboid {
-            half_extends: Vec3::new(20.0, primary_window.height(), 0.0),
-            border_radius: None,
-        });
+        .insert(RigidBody::Fixed)
+        .insert(Collider::cuboid(20.0, primary_window.height()));
 
     // Draw grid
     for y in 0..grid_size.y {
@@ -136,7 +125,7 @@ fn setup_system(
             };
             let mut bundle = GeometryBuilder::build_as(
                 &shape,
-                DrawMode::Fill(FillMode::color(Color::rgb_u8(
+                DrawMode::Fill(bevy_prototype_lyon::draw::FillMode::color(Color::rgb_u8(
                     pixel.0[0], pixel.0[1], pixel.0[2],
                 ))),
                 Transform::default(),
@@ -146,16 +135,11 @@ fn setup_system(
             commands
                 .spawn_bundle(bundle)
                 .insert(Particle { x, y })
-                .insert(RigidBody::Static)
-                .insert(CollisionShape::Sphere {
-                    radius: primary_window.width() / grid_size.x as f32 / 2.0 * 0.2,
-                })
-                .insert(Velocity::default())
-                .insert(PhysicMaterial {
-                    restitution: 0.9,
-                    ..default()
-                })
-                .insert(RotationConstraints::lock());
+                .insert(RigidBody::Fixed)
+                .insert(Collider::ball(
+                    primary_window.width() / grid_size.x as f32 / 2.0 * 0.2,
+                ))
+                .insert(Velocity::default());
         }
     }
 }

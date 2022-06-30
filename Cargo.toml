@@ -6,7 +6,8 @@ edition = "2021"
 [dependencies]
 bevy = { version = "0.7", features = ["dynamic"] }
 bevy_prototype_lyon = "0.5.0"
-heron = { version = "3.1", features = ["2d"] }
+# heron = { version = "3.1", features = ["2d"] }
+bevy_rapier2d = { version = "*", features = ["simd-stable", "debug-render"] }
 image = "0.24"
 rand = "0.8"
 v4l = "0.13"

@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
-use heron::prelude::*;
+use bevy_rapier2d::prelude::*;
 use image::{DynamicImage, GenericImageView, ImageBuffer};
 use rand::Rng;
 use v4l::{io::traits::CaptureStream, prelude::MmapStream};
@@ -15,7 +15,7 @@ pub struct Particle {
 }
 
 pub fn draw_particles(
-    mut particles: Query<(&mut Path, &mut CollisionShape, &Particle)>,
+    mut particles: Query<(&mut Path, &mut Collider, &Particle)>,
     grid_size: Res<GridSize>,
     img: Res<DynamicImage>,
     keyboard_input: Res<Input<KeyCode>>,
@@ -55,7 +55,7 @@ pub fn draw_particles(
             ..default()
         };
         *path = ShapePath::build_as(&shape);
-        *collision_shape = CollisionShape::Sphere { radius: radii };
+        *collision_shape = Collider::ball(radii);
     });
 }
 
@@ -83,7 +83,7 @@ pub fn reset_particle_position(
         transform.translation.y = pos_y;
 
         *velocity = Velocity::default();
-        *rigid_body = RigidBody::Static;
+        *rigid_body = RigidBody::Fixed;
     });
 }
 
@@ -99,6 +99,6 @@ pub fn make_particles_dynamic(
 
     particles.for_each_mut(|(mut rigid_body, mut velocity)| {
         *rigid_body = RigidBody::Dynamic;
-        *velocity = Velocity::from_linear(Vec3::new(rng.gen(), rng.gen(), rng.gen()));
+        *velocity = Velocity::linear(Vec2::new(rng.gen::<f32>() * 10.0, rng.gen::<f32>() * 10.0));
     });
 }
