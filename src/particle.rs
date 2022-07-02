@@ -53,7 +53,7 @@ pub fn draw_particles(
         *draw_mode = DrawMode::Fill(draw::FillMode::color(Color::rgb_u8(
             pixel.0[0], pixel.0[1], pixel.0[2],
         )));
-        *collision_shape = Collider::cuboid(radii, radii);
+        *collision_shape = Collider::cuboid(radii / 2.0, radii / 2.0);
     });
 }
 
