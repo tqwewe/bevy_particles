@@ -10,4 +10,5 @@ bevy_prototype_lyon = "0.5.0"
 bevy_rapier2d = { version = "*", features = ["simd-stable", "debug-render"] }
 image = "0.24"
 rand = "0.8"
+yuv = "0.1"
 v4l = "0.13"

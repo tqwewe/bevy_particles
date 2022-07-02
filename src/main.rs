@@ -1,9 +1,14 @@
 mod particle;
 
-use bevy::prelude::*;
+use bevy::{
+    ecs::event::Events,
+    prelude::*,
+    window::{WindowMode, WindowResized},
+};
 use bevy_prototype_lyon::prelude::*;
 use bevy_rapier2d::prelude::*;
 use image::{imageops::FilterType, io::Reader as ImageReader, DynamicImage, GenericImageView};
+use particle::apply_random_velocity;
 use v4l::prelude::*;
 
 use crate::particle::{draw_particles, make_particles_dynamic, reset_particle_position, Particle};
@@ -12,23 +17,29 @@ use crate::particle::{draw_particles, make_particles_dynamic, reset_particle_pos
 pub struct GridSize(UVec2);
 
 fn main() {
-    let grid_size = GridSize(UVec2::new(112, 60)); // 300, 160
+    let grid_size = GridSize(UVec2::new(160 / 2, 120 / 2)); // 300, 160
 
-    let img = ImageReader::open("cat.jpg")
-        .unwrap()
-        .decode()
-        .unwrap()
-        .resize_exact(grid_size.x, grid_size.y, FilterType::Gaussian);
+    // let img = ImageReader::open("cat.jpg")
+    //     .unwrap()
+    //     .decode()
+    //     .unwrap()
+    //     .resize_exact(grid_size.x, grid_size.y, FilterType::Gaussian);
+
+    let dev = Device::new(0).expect("Failed to open device");
+
+    let stream = MmapStream::with_buffers(&dev, v4l::buffer::Type::VideoCapture, 4)
+        .expect("Failed to create buffer stream");
 
     App::new()
         .insert_resource(Msaa { samples: 4 })
         .insert_resource(ClearColor(Color::BLACK))
         // .insert_resource(Gravity::from(Vec3::new(0.0, -9.81, 0.0)))
         .insert_resource(grid_size)
-        .insert_resource(img)
+        .insert_resource(stream)
         .insert_resource(WindowDescriptor {
-            width: 640.,
-            height: 480.,
+            // width: 640.,
+            // height: 480.,
+            mode: WindowMode::BorderlessFullscreen,
             ..default()
         })
         .add_plugins(DefaultPlugins)
@@ -36,9 +47,12 @@ fn main() {
         // .add_plugin(RapierDebugRenderPlugin::default())
         .add_plugin(ShapePlugin)
         .add_startup_system(setup_system)
+        .add_system(bevy::input::system::exit_on_esc_system)
         // .add_system(enable_ccd)
+        .add_system(place_wall_resize)
         .add_system(reset_particle_position)
         .add_system(make_particles_dynamic)
+        .add_system(apply_random_velocity.after(make_particles_dynamic))
         .add_system(draw_particles.after(reset_particle_position))
         .run();
 }
@@ -54,10 +68,19 @@ fn main() {
 //     }
 // }
 
+#[derive(Component)]
+struct LeftWall;
+
+#[derive(Component)]
+struct RightWall;
+
+#[derive(Component)]
+struct Floor;
+
 fn setup_system(
     mut commands: Commands,
     grid_size: Res<GridSize>,
-    img: Res<DynamicImage>,
+    // img: Res<DynamicImage>,
     windows: Res<Windows>,
 ) {
     let primary_window = windows.primary();
@@ -83,7 +106,8 @@ fn setup_system(
             )),
         ))
         .insert(RigidBody::Fixed)
-        .insert(Collider::cuboid(primary_window.width(), 20.0));
+        .insert(Collider::cuboid(primary_window.width(), 20.0))
+        .insert(Floor);
 
     commands
         .spawn_bundle(TransformBundle::from_transform(
@@ -94,19 +118,21 @@ fn setup_system(
             )),
         ))
         .insert(RigidBody::Fixed)
-        .insert(Collider::cuboid(20.0, primary_window.height()));
+        .insert(Collider::cuboid(20.0, primary_window.height()))
+        .insert(LeftWall);
 
     commands
         .spawn_bundle(TransformBundle::from_transform(
             Transform::from_translation(Vec3::new((primary_window.width() / 2.0) + 20.0, 0.0, 0.0)),
         ))
         .insert(RigidBody::Fixed)
-        .insert(Collider::cuboid(20.0, primary_window.height()));
+        .insert(Collider::cuboid(20.0, primary_window.height()))
+        .insert(RightWall);
 
     // Draw grid
     for y in 0..grid_size.y {
         for x in 0..grid_size.x {
-            let pixel = img.get_pixel(x, grid_size.y - y - 1);
+            // let pixel = img.get_pixel(x, grid_size.y - y - 1);
             // let brightness = (pixel.0[0] + pixel.0[1] + pixel.0[2]) as f32 / brightest_pixel as f32;
 
             let pos_x = x as f32 * primary_window.width() / grid_size.x as f32
@@ -125,9 +151,7 @@ fn setup_system(
             };
             let mut bundle = GeometryBuilder::build_as(
                 &shape,
-                DrawMode::Fill(bevy_prototype_lyon::draw::FillMode::color(Color::rgb_u8(
-                    pixel.0[0], pixel.0[1], pixel.0[2],
-                ))),
+                DrawMode::Fill(bevy_prototype_lyon::draw::FillMode::color(Color::WHITE)),
                 Transform::default(),
             );
             bundle.transform.translation.x = pos_x;
@@ -141,5 +165,48 @@ fn setup_system(
                 ))
                 .insert(Velocity::default());
         }
+    }
+}
+
+fn place_wall_resize(
+    mut query: ParamSet<(
+        Query<(&mut Transform, &mut Collider), With<Floor>>,
+        Query<(&mut Transform, &mut Collider), With<LeftWall>>,
+        Query<(&mut Transform, &mut Collider), With<RightWall>>,
+        Query<(&mut Transform, &Particle)>,
+    )>,
+    mut resize_event: EventReader<WindowResized>,
+    grid_size: Res<GridSize>,
+    windows: Res<Windows>,
+) {
+    if resize_event.iter().next().is_some() {
+        let primary_window = windows.primary();
+
+        query.p0().for_each_mut(|(mut transform, mut collider)| {
+            transform.translation.y = ((primary_window.height() / 2.0) + 20.0) * -1.0;
+            *collider = Collider::cuboid(primary_window.width(), 20.0);
+        });
+
+        query.p1().for_each_mut(|(mut transform, mut collider)| {
+            transform.translation.x = ((primary_window.width() / 2.0) + 20.0) * -1.0;
+            *collider = Collider::cuboid(20.0, primary_window.height());
+        });
+
+        query.p2().for_each_mut(|(mut transform, mut collider)| {
+            transform.translation.x = (primary_window.width() / 2.0) + 20.0;
+            *collider = Collider::cuboid(20.0, primary_window.height());
+        });
+
+        query.p3().for_each_mut(|(mut transform, particle)| {
+            let pos_x = particle.x as f32 * primary_window.width() / grid_size.x as f32
+                - primary_window.width() / 2.0
+                + primary_window.width() / grid_size.x as f32 / 2.0;
+            let pos_y = particle.y as f32 * primary_window.height() / grid_size.y as f32
+                - primary_window.height() / 2.0
+                + primary_window.height() / grid_size.y as f32 / 2.0;
+
+            transform.translation.x = pos_x;
+            transform.translation.y = pos_y;
+        });
     }
 }
