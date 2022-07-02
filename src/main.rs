@@ -1,15 +1,12 @@
+#![allow(clippy::type_complexity)]
+
 mod particle;
 
-use bevy::{
-    ecs::event::Events,
-    prelude::*,
-    window::{WindowMode, WindowResized},
-};
+use bevy::{prelude::*, window::WindowResized};
 use bevy_prototype_lyon::prelude::*;
 use bevy_rapier2d::prelude::*;
-use image::{imageops::FilterType, io::Reader as ImageReader, DynamicImage, GenericImageView};
+use image::{imageops::FilterType, io::Reader as ImageReader};
 use particle::apply_random_velocity;
-use v4l::prelude::*;
 
 use crate::particle::{draw_particles, make_particles_dynamic, reset_particle_position, Particle};
 
@@ -17,29 +14,23 @@ use crate::particle::{draw_particles, make_particles_dynamic, reset_particle_pos
 pub struct GridSize(UVec2);
 
 fn main() {
-    let grid_size = GridSize(UVec2::new(160 / 2, 120 / 2)); // 300, 160
+    let grid_size = GridSize(UVec2::new(80, 60)); // 300, 160
 
-    // let img = ImageReader::open("cat.jpg")
-    //     .unwrap()
-    //     .decode()
-    //     .unwrap()
-    //     .resize_exact(grid_size.x, grid_size.y, FilterType::Gaussian);
-
-    let dev = Device::new(0).expect("Failed to open device");
-
-    let stream = MmapStream::with_buffers(&dev, v4l::buffer::Type::VideoCapture, 4)
-        .expect("Failed to create buffer stream");
+    let img = ImageReader::open("cat.jpg")
+        .unwrap()
+        .decode()
+        .unwrap()
+        .resize_exact(grid_size.x, grid_size.y, FilterType::Gaussian);
 
     App::new()
         .insert_resource(Msaa { samples: 4 })
         .insert_resource(ClearColor(Color::BLACK))
         // .insert_resource(Gravity::from(Vec3::new(0.0, -9.81, 0.0)))
         .insert_resource(grid_size)
-        .insert_resource(stream)
+        .insert_resource(img)
         .insert_resource(WindowDescriptor {
-            // width: 640.,
-            // height: 480.,
-            mode: WindowMode::BorderlessFullscreen,
+            width: 640.,
+            height: 480.,
             ..default()
         })
         .add_plugins(DefaultPlugins)
@@ -77,24 +68,10 @@ struct RightWall;
 #[derive(Component)]
 struct Floor;
 
-fn setup_system(
-    mut commands: Commands,
-    grid_size: Res<GridSize>,
-    // img: Res<DynamicImage>,
-    windows: Res<Windows>,
-) {
+fn setup_system(mut commands: Commands, grid_size: Res<GridSize>, windows: Res<Windows>) {
     let primary_window = windows.primary();
 
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
-
-    // let mut brightest_pixel = 0;
-    // for y in 0..grid_size.y {
-    //     for x in 0..grid_size.x {
-    //         let pixel = img.get_pixel(x, grid_size.y - y - 1);
-    //         let brightness = (pixel.0[0] + pixel.0[1] + pixel.0[2]);
-    //         brightest_pixel = brightness.max(brightest_pixel);
-    //     }
-    // }
 
     // Ground and walls
     commands
@@ -132,9 +109,6 @@ fn setup_system(
     // Draw grid
     for y in 0..grid_size.y {
         for x in 0..grid_size.x {
-            // let pixel = img.get_pixel(x, grid_size.y - y - 1);
-            // let brightness = (pixel.0[0] + pixel.0[1] + pixel.0[2]) as f32 / brightest_pixel as f32;
-
             let pos_x = x as f32 * primary_window.width() / grid_size.x as f32
                 - primary_window.width() / 2.0
                 + primary_window.width() / grid_size.x as f32 / 2.0;
